@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -427,6 +426,7 @@ const MediaEditor: React.FC = () => {
               setSelectedMedia={setSelectedMedia}
               updateMediaProperties={updateMediaProperties}
               currentTime={currentTime}
+              isPlaying={isPlaying}
             />
           </div>
           

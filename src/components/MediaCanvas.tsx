@@ -44,6 +44,7 @@ interface MediaCanvasProps {
     position: { x: number, y: number };
   }>) => void;
   currentTime: number;
+  isPlaying: boolean;
 }
 
 const MediaCanvas: React.FC<MediaCanvasProps> = ({
@@ -51,9 +52,11 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
   selectedMedia,
   setSelectedMedia,
   updateMediaProperties,
-  currentTime
+  currentTime,
+  isPlaying
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const videoRefs = useRef<{[key: string]: HTMLVideoElement | null}>({});
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeDirection, setResizeDirection] = useState<string | null>(null);
@@ -104,6 +107,25 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
     }
   };
   
+  // Control video playback based on isPlaying state
+  useEffect(() => {
+    mediaElements.forEach(media => {
+      if (media.type === 'video') {
+        const videoElement = videoRefs.current[media.id];
+        if (videoElement) {
+          if (isPlaying && currentTime >= media.startTime && currentTime <= media.endTime) {
+            // Calculate where to seek within the video
+            const videoTimeOffset = Math.max(0, currentTime - media.startTime);
+            videoElement.currentTime = videoTimeOffset;
+            videoElement.play().catch(err => console.error("Error playing video:", err));
+          } else {
+            videoElement.pause();
+          }
+        }
+      }
+    });
+  }, [isPlaying, currentTime, mediaElements]);
+
   // Handle mouse move for dragging or resizing
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -203,11 +225,13 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
                   />
                 ) : (
                   <video 
+                    ref={el => videoRefs.current[media.id] = el}
                     src={media.src}
                     className="w-full h-full object-cover"
                     autoPlay={false}
                     controls={false}
-                    muted
+                    muted={false}
+                    playsInline
                   />
                 )}
                 
