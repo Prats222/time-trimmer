@@ -45,6 +45,7 @@ interface MediaCanvasProps {
   }>) => void;
   currentTime: number;
   isPlaying: boolean;
+  isMobile?: boolean;
 }
 
 const MediaCanvas: React.FC<MediaCanvasProps> = ({
@@ -53,7 +54,8 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
   setSelectedMedia,
   updateMediaProperties,
   currentTime,
-  isPlaying
+  isPlaying,
+  isMobile = false
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<{[key: string]: HTMLVideoElement | null}>({});
@@ -62,6 +64,7 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
   const [resizeDirection, setResizeDirection] = useState<string | null>(null);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [startSize, setStartSize] = useState({ width: 0, height: 0 });
+  const [touchStartPos, setTouchStartPos] = useState({ x: 0, y: 0 });
   
   // Handle element selection
   const handleSelectMedia = (id: string) => {
@@ -78,10 +81,6 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
     if (!e.currentTarget.classList.contains('resizer')) {
       handleSelectMedia(id);
       setIsDragging(true);
-      setStartPos({ 
-        x: e.clientX, 
-        y: e.clientY 
-      });
       
       const media = mediaElements.find(m => m.id === id);
       if (media) {
@@ -93,6 +92,71 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
     }
   };
   
+  // Handle touch start for mobile dragging
+  const handleTouchStart = (e: React.TouchEvent, id: string) => {
+    e.stopPropagation();
+    
+    if (!e.currentTarget.classList.contains('resizer')) {
+      handleSelectMedia(id);
+      setIsDragging(true);
+      
+      const touch = e.touches[0];
+      const media = mediaElements.find(m => m.id === id);
+      
+      if (media) {
+        setTouchStartPos({
+          x: touch.clientX - media.position.x,
+          y: touch.clientY - media.position.y
+        });
+      }
+    }
+  };
+  
+  // Handle touch move for mobile dragging
+  const handleTouchMove = (e: TouchEvent) => {
+    if (isDragging && selectedMedia) {
+      const touch = e.touches[0];
+      const newX = Math.max(0, touch.clientX - touchStartPos.x);
+      const newY = Math.max(0, touch.clientY - touchStartPos.y);
+      
+      updateMediaProperties(selectedMedia.id, {
+        position: { x: newX, y: newY }
+      });
+    } else if (isResizing && selectedMedia && resizeDirection) {
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - touchStartPos.x;
+      const deltaY = touch.clientY - touchStartPos.y;
+      
+      let newWidth = startSize.width;
+      let newHeight = startSize.height;
+      
+      // Handle resizing based on the direction
+      if (resizeDirection.includes('e')) {
+        newWidth = Math.max(50, startSize.width + deltaX);
+      }
+      if (resizeDirection.includes('w')) {
+        newWidth = Math.max(50, startSize.width - deltaX);
+      }
+      if (resizeDirection.includes('s')) {
+        newHeight = Math.max(50, startSize.height + deltaY);
+      }
+      if (resizeDirection.includes('n')) {
+        newHeight = Math.max(50, startSize.height - deltaY);
+      }
+      
+      updateMediaProperties(selectedMedia.id, {
+        width: newWidth,
+        height: newHeight
+      });
+    }
+  };
+  
+  // Handle touch end
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    setIsResizing(false);
+  };
+  
   // Handle mouse down for resizing
   const handleResizeStart = (e: React.MouseEvent, id: string, direction: string) => {
     e.stopPropagation();
@@ -100,6 +164,22 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
     setIsResizing(true);
     setResizeDirection(direction);
     setStartPos({ x: e.clientX, y: e.clientY });
+    
+    const media = mediaElements.find(m => m.id === id);
+    if (media) {
+      setStartSize({ width: media.width, height: media.height });
+    }
+  };
+  
+  // Handle touch start for resizing on mobile
+  const handleTouchResizeStart = (e: React.TouchEvent, id: string, direction: string) => {
+    e.stopPropagation();
+    handleSelectMedia(id);
+    setIsResizing(true);
+    setResizeDirection(direction);
+    
+    const touch = e.touches[0];
+    setTouchStartPos({ x: touch.clientX, y: touch.clientY });
     
     const media = mediaElements.find(m => m.id === id);
     if (media) {
@@ -172,16 +252,27 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
     if (isDragging || isResizing) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
+      
+      // Touch events for mobile
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd);
     }
     
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [isDragging, isResizing, selectedMedia, startPos, startSize, resizeDirection, updateMediaProperties]);
+  }, [isDragging, isResizing, selectedMedia, startPos, startSize, resizeDirection, updateMediaProperties, touchStartPos]);
   
   // Clear selection when clicking the canvas background
   const handleCanvasClick = () => {
+    setSelectedMedia(null);
+  };
+  
+  // Handle canvas touch for mobile
+  const handleCanvasTouch = () => {
     setSelectedMedia(null);
   };
   
@@ -190,9 +281,10 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
       ref={canvasRef} 
       className="w-full h-full relative overflow-hidden"
       onClick={handleCanvasClick}
+      onTouchStart={handleCanvasTouch}
     >
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative w-4/5 h-4/5 border border-gray-300 bg-white shadow-sm rounded-md overflow-hidden flex items-center justify-center">
+        <div className={`relative ${isMobile ? 'w-11/12 h-3/4' : 'w-4/5 h-4/5'} border border-gray-300 bg-white shadow-sm rounded-md overflow-hidden flex items-center justify-center`}>
           {/* Render media elements */}
           {mediaElements.map((media) => {
             // Check if the media should be visible at the current time
@@ -216,6 +308,7 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
                 }}
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => handleMouseDown(e, media.id)}
+                onTouchStart={(e) => handleTouchStart(e, media.id)}
               >
                 {media.type === 'image' ? (
                   <img 
@@ -241,18 +334,22 @@ const MediaCanvas: React.FC<MediaCanvasProps> = ({
                     <div 
                       className="resizer nw" 
                       onMouseDown={(e) => handleResizeStart(e, media.id, 'nw')}
+                      onTouchStart={(e) => handleTouchResizeStart(e, media.id, 'nw')}
                     />
                     <div 
                       className="resizer ne" 
                       onMouseDown={(e) => handleResizeStart(e, media.id, 'ne')}
+                      onTouchStart={(e) => handleTouchResizeStart(e, media.id, 'ne')}
                     />
                     <div 
                       className="resizer sw" 
                       onMouseDown={(e) => handleResizeStart(e, media.id, 'sw')}
+                      onTouchStart={(e) => handleTouchResizeStart(e, media.id, 'sw')}
                     />
                     <div 
                       className="resizer se" 
                       onMouseDown={(e) => handleResizeStart(e, media.id, 'se')}
+                      onTouchStart={(e) => handleTouchResizeStart(e, media.id, 'se')}
                     />
                     
                     {/* Drag handle */}
