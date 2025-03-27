@@ -62,6 +62,7 @@ const MediaEditor: React.FC = () => {
   
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle file upload
@@ -80,19 +81,66 @@ const MediaEditor: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const src = e.target?.result as string;
-      const newMedia = {
-        id: `media-${Date.now()}`,
-        type: isImage ? 'image' : 'video',
-        src,
-        width: 300,
-        height: 400,
-        startTime: 0,
-        endTime: 5, // Default to 5 seconds
-        position: { x: 100, y: 100 }
-      };
       
-      setMediaElements(prev => [...prev, newMedia]);
-      setSelectedMedia(newMedia);
+      if (isVideo) {
+        // Create a temporary video element to get the duration
+        const tempVideo = document.createElement('video');
+        tempVideo.src = src;
+        
+        tempVideo.onloadedmetadata = () => {
+          const videoDuration = tempVideo.duration;
+          console.log("Detected video duration:", videoDuration);
+          setDuration(videoDuration);
+          
+          const newMedia = {
+            id: `media-${Date.now()}`,
+            type: 'video' as const,
+            src,
+            width: 300,
+            height: 400,
+            startTime: 0,
+            endTime: Math.min(videoDuration, 5), // Default to 5 seconds or video duration if shorter
+            position: { x: 100, y: 100 }
+          };
+          
+          setMediaElements(prev => [...prev, newMedia]);
+          setSelectedMedia(newMedia);
+        };
+        
+        // Handle loading error
+        tempVideo.onerror = () => {
+          console.error("Error loading video for duration detection");
+          
+          const newMedia = {
+            id: `media-${Date.now()}`,
+            type: 'video' as const,
+            src,
+            width: 300,
+            height: 400,
+            startTime: 0,
+            endTime: 5,
+            position: { x: 100, y: 100 }
+          };
+          
+          setMediaElements(prev => [...prev, newMedia]);
+          setSelectedMedia(newMedia);
+        };
+      } else {
+        // For images, use default duration
+        const newMedia = {
+          id: `media-${Date.now()}`,
+          type: 'image' as const,
+          src,
+          width: 300,
+          height: 400,
+          startTime: 0,
+          endTime: 5, // Default to 5 seconds
+          position: { x: 100, y: 100 }
+        };
+        
+        setMediaElements(prev => [...prev, newMedia]);
+        setSelectedMedia(newMedia);
+      }
     };
     
     reader.readAsDataURL(file);
